@@ -1,0 +1,3 @@
+{
+    "postCreateCommand": "git clone https://github.com/slopstack-labs/sloppiler /workspaces/sloppiler"
+}
