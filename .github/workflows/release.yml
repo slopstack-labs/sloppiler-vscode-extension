@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package extension
+        run: npx vsce package --no-dependencies
+
+      - name: Upload to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Sloppiler for VS Code $GITHUB_REF_NAME" \
+            --notes "Binary artefact materialised. Install via: \`code --install-extension sloppiler-${VERSION}.vsix\`" \
+            "sloppiler-${VERSION}.vsix"
