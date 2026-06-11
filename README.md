@@ -23,12 +23,14 @@ A first-class sidebar panel surfaces the full Sloppiler configuration surface:
 
 | Section | Controls |
 |---|---|
-| **Intelligence Substrate** | Provider, model, API key |
+| **Intelligence Substrate** | Provider, model (free-text + autocomplete), Ollama URL or API key |
 | **Compilation Target** | linux / windows / darwin |
 | **Pipeline Configuration** | Agentic Co-Pilot Mode, Remediation Loop Cycles, Force-Iterate Enhancement Pipeline |
 | **Output Artefact** | Binary delivery path |
 
 All settings persist across sessions and sync bidirectionally with VS Code's native settings layer.
+
+The **Model** field accepts free-text input — type any model name not in the built-in list (e.g. `qwen2.5-coder:1.5b`). Known models autocomplete as you type. To permanently extend the list, add entries to `sloppiler.customModels` in your VS Code settings.
 
 ### 🔬 Tokenmaxx Linter
 
@@ -52,7 +54,7 @@ For maximum throughput, **Sloppiler: Tokenmaxx Entire File** elevates every subs
 ## Requirements
 
 - [Sloppiler](https://github.com/slopstack-labs/sloppiler) binary on your `$PATH` (or configured via `sloppiler.executablePath`)
-- For `--provider=local`: [Ollama](https://ollama.com) running locally with a model pulled
+- For `--provider=local`: [Ollama](https://ollama.com) running locally (or in Docker) with a model pulled
 - For cloud providers: a valid API key via `sloppiler.apiKey` or the `SLOPPILER_API_KEY` environment variable
 
 ## Extension Settings
@@ -61,8 +63,10 @@ For maximum throughput, **Sloppiler: Tokenmaxx Entire File** elevates every subs
 |---|---|---|
 | `sloppiler.executablePath` | `sloppiler` | Path to the Sloppiler binary |
 | `sloppiler.provider` | `local` | Intelligence provider: `local`, `openai`, `google`, `claude` |
-| `sloppiler.model` | *(provider default)* | Model override |
-| `sloppiler.apiKey` | — | API key (or set `SLOPPILER_API_KEY`) |
+| `sloppiler.model` | *(provider default)* | Model override — any string, autocompletes from known + custom models |
+| `sloppiler.apiKey` | — | API key for cloud providers (or set `SLOPPILER_API_KEY`) |
+| `sloppiler.ollamaUrl` | `http://localhost:11434/api/generate` | Ollama API URL (local provider only) |
+| `sloppiler.customModels` | `{}` | Extra models per provider, e.g. `{"local": ["qwen2.5-coder:1.5b"]}` |
 | `sloppiler.target` | `linux` | Target OS: `linux`, `windows`, `darwin` |
 | `sloppiler.outputPath` | `a.out` | Output binary path |
 | `sloppiler.optimistic` | `false` | Engage agentic assembly co-pilot (requires `nasm` + `ld`) |

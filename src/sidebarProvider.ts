@@ -1,26 +1,23 @@
 import * as vscode from 'vscode';
 
-const MODELS: Record<string, string[]> = {
-    local:  ['llama3', 'codellama', 'phi3'],
-    openai: ['gpt-4o', 'gpt-4o-mini', 'o4-mini'],
-    google: ['gemini-2.0-flash', 'gemini-2.5-pro'],
-    claude: ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-3-5'],
-};
-
 export class SidebarProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'sloppiler.sidebar';
     private _view?: vscode.WebviewView;
 
-    constructor(private readonly _compile: () => void) {}
+    constructor(
+        private readonly _compile: () => void,
+        private readonly _getModels: () => Record<string, string[]>,
+    ) {}
 
     resolveWebviewView(webviewView: vscode.WebviewView) {
         this._view = webviewView;
         webviewView.webview.options = { enableScripts: true };
         webviewView.webview.html = this._getHtml();
-        this._sendSettings();
-
         webviewView.webview.onDidReceiveMessage(msg => {
             switch (msg.type) {
+                case 'ready':
+                    this._sendSettings();
+                    break;
                 case 'updateSetting':
                     vscode.workspace.getConfiguration('sloppiler')
                         .update(msg.key, msg.value, vscode.ConfigurationTarget.Global);
@@ -32,26 +29,54 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         });
     }
 
-    refresh() {
-        this._sendSettings();
+    refresh(models?: Record<string, string[]>) {
+        this._sendSettings(models);
     }
 
-    private _sendSettings() {
+    private async _fetchOllamaModels(ollamaUrl: string): Promise<string[]> {
+        try {
+            const base = new URL(ollamaUrl).origin;
+            const res = await fetch(`${base}/api/tags`);
+            if (!res.ok) { return []; }
+            const data = await res.json() as { models?: { name: string }[] };
+            return (data.models ?? []).map((m: { name: string }) => m.name);
+        } catch {
+            return [];
+        }
+    }
+
+    private async _sendSettings(models?: Record<string, string[]>) {
         if (!this._view) { return; }
         const cfg = vscode.workspace.getConfiguration('sloppiler');
+        const provider  = cfg.get('provider', 'local');
+        const ollamaUrl = cfg.get('ollamaUrl', 'http://localhost:11434/api/generate');
+
+        let effectiveModels = models ?? this._getModels();
+        if (provider === 'local') {
+            const live = await this._fetchOllamaModels(ollamaUrl as string);
+            if (live.length > 0) {
+                const existing = effectiveModels['local'] ?? [];
+                effectiveModels = {
+                    ...effectiveModels,
+                    local: [...new Set([...live, ...existing])],
+                };
+            }
+        }
+
         this._view.webview.postMessage({
             type: 'settings',
             settings: {
-                provider:     cfg.get('provider', 'local'),
+                provider,
                 model:        cfg.get('model', ''),
                 apiKey:       cfg.get('apiKey', ''),
+                ollamaUrl,
                 target:       cfg.get('target', 'linux'),
                 outputPath:   cfg.get('outputPath', 'a.out'),
                 optimistic:   cfg.get('optimistic', false),
                 loop:         cfg.get('loop', 0),
                 forceIterate: cfg.get('forceIterate', 0),
             },
-            models: MODELS,
+            models: effectiveModels,
         });
     }
 
@@ -212,9 +237,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     </div>
     <div class="field">
       <label>Model</label>
-      <select id="model"></select>
+      <input type="text" id="model" list="model-list" placeholder="provider default">
+      <datalist id="model-list"></datalist>
     </div>
-    <div class="field">
+    <div class="field" id="ollamaUrlField" style="display:none">
+      <label>Ollama URL</label>
+      <input type="text" id="ollamaUrl" placeholder="http://localhost:11434/api/generate">
+    </div>
+    <div class="field" id="apiKeyField" style="display:none">
       <label>API Key</label>
       <input type="password" id="apiKey" placeholder="or set SLOPPILER_API_KEY">
     </div>
@@ -274,7 +304,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       vscode.postMessage({ type: 'updateSetting', key, value });
     }
 
-    // Provider + model dropdowns
     function buildProviderDropdown(providers, current) {
       const el = $('provider');
       el.innerHTML = providers.map(p =>
@@ -282,14 +311,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       ).join('');
     }
 
-    function buildModelDropdown(provider, current) {
-      const el = $('model');
+    function updateModelDatalist(provider) {
+      const dl = $('model-list');
       const models = allModels[provider] || [];
-      el.innerHTML = \`<option value="">provider default</option>\` +
-        models.map(m => \`<option value="\${m}" \${m === current ? 'selected' : ''}>\${m}</option>\`).join('');
+      dl.innerHTML = models.map(m => \`<option value="\${m}">\`).join('');
     }
 
-    // Target buttons
+    function updateProviderFields(provider) {
+      $('ollamaUrlField').style.display = provider === 'local' ? '' : 'none';
+      $('apiKeyField').style.display    = provider !== 'local' ? '' : 'none';
+      updateModelDatalist(provider);
+    }
+
     function setTarget(target) {
       document.querySelectorAll('.target-group button').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.target === target);
@@ -305,18 +338,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     $('provider').addEventListener('change', () => {
       const p = $('provider').value;
-      buildModelDropdown(p, '');
+      updateProviderFields(p);
       send('provider', p);
+      $('model').value = '';
       send('model', '');
     });
 
     $('model').addEventListener('change', () => send('model', $('model').value));
+    $('model').addEventListener('blur',   () => send('model', $('model').value));
     $('apiKey').addEventListener('change', () => send('apiKey', $('apiKey').value));
+    $('ollamaUrl').addEventListener('change', () => send('ollamaUrl', $('ollamaUrl').value));
+    $('ollamaUrl').addEventListener('blur',   () => send('ollamaUrl', $('ollamaUrl').value));
     $('outputPath').addEventListener('change', () => send('outputPath', $('outputPath').value));
     $('loop').addEventListener('change', () => send('loop', Number($('loop').value)));
     $('forceIterate').addEventListener('change', () => send('forceIterate', Number($('forceIterate').value)));
     $('optimistic').addEventListener('change', () => send('optimistic', $('optimistic').checked));
     $('compileBtn').addEventListener('click', () => vscode.postMessage({ type: 'compile' }));
+
+    vscode.postMessage({ type: 'ready' });
 
     window.addEventListener('message', ({ data }) => {
       if (data.type !== 'settings') { return; }
@@ -324,10 +363,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       allModels = data.models;
 
       buildProviderDropdown(Object.keys(allModels), s.provider);
-      buildModelDropdown(s.provider, s.model);
+      updateProviderFields(s.provider);
       setTarget(s.target);
 
+      $('model').value        = s.model;
       $('apiKey').value       = s.apiKey;
+      $('ollamaUrl').value    = s.ollamaUrl;
       $('outputPath').value   = s.outputPath;
       $('loop').value         = s.loop;
       $('forceIterate').value = s.forceIterate;

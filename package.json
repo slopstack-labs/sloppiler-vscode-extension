@@ -2,7 +2,7 @@
   "name": "sloppiler",
   "displayName": "Sloppiler",
   "description": "AI-native compilation. Beyond deterministic.",
-  "version": "0.0.7",
+  "version": "0.0.10",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -95,6 +95,16 @@
           "default": 0,
           "minimum": 0,
           "description": "Force N improvement cycles even on successful compilation."
+        },
+        "sloppiler.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434/api/generate",
+          "description": "Ollama API URL (only used when provider is 'local')."
+        },
+        "sloppiler.customModels": {
+          "type": "object",
+          "default": {},
+          "description": "Extra models to add to each provider's list. Keys are provider names (local, openai, google, claude), values are arrays of model name strings. Example: {\"local\": [\"qwen2.5-coder:1.5b\", \"mistral\"]}"
         }
       }
     }

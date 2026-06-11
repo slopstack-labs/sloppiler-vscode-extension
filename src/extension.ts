@@ -1,34 +1,41 @@
 import * as vscode from 'vscode';
+import * as cp from 'child_process';
+import * as path from 'path';
 import { SidebarProvider } from './sidebarProvider';
 import { TokenmaxxDiagnostics, TokenmaxxActionProvider, tokenmaxxFile } from './tokenmaxx';
 
-let terminal: vscode.Terminal | undefined;
+let outputChannel: vscode.OutputChannel;
 let providerStatusItem: vscode.StatusBarItem;
+let compiling = false;
 
-const MODELS: Record<string, string[]> = {
+function stripAnsi(s: string): string {
+    return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '');
+}
+
+const DEFAULT_MODELS: Record<string, string[]> = {
     local:  ['llama3', 'codellama', 'phi3'],
     openai: ['gpt-4o', 'gpt-4o-mini', 'o4-mini'],
     google: ['gemini-2.0-flash', 'gemini-2.5-pro'],
     claude: ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-3-5'],
 };
 
-const COMPILE_MESSAGES = [
-    'Routing compilation intent to intelligence substrate...',
-    'Bypassing pedantic typechecking...',
-    'Engaging foundational intelligence layer...',
-    'Reasoning about your intent rather than your syntax...',
-    'Eliminating deterministic bottlenecks...',
-    'Holistically transforming source artefacts...',
-    'Aligning output quality with ground truth...',
-    'Orchestrating synergistic human-AI co-compilation...',
-    'Shifting left. Stakeholder value incoming.',
-    'Zero determinism engaged. Every build is a unique experience.',
-    'Querying inference layer for binary ideation...',
-    'Materialising deployment-ready artefact...',
-];
+function getModels(): Record<string, string[]> {
+    const custom = vscode.workspace.getConfiguration('sloppiler').get<Record<string, string[]>>('customModels', {});
+    const merged: Record<string, string[]> = {};
+    for (const provider of Object.keys(DEFAULT_MODELS)) {
+        const extras = custom[provider] ?? [];
+        const base = DEFAULT_MODELS[provider];
+        merged[provider] = [...base, ...extras.filter(m => !base.includes(m))];
+    }
+    return merged;
+}
+
 
 export function activate(context: vscode.ExtensionContext) {
-    const sidebar = new SidebarProvider(compile);
+    outputChannel = vscode.window.createOutputChannel('Sloppiler');
+    context.subscriptions.push(outputChannel);
+
+    const sidebar = new SidebarProvider(compile, getModels);
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(SidebarProvider.viewType, sidebar)
     );
@@ -74,11 +81,8 @@ export function activate(context: vscode.ExtensionContext) {
                 updateProviderItem();
             }
             if (e.affectsConfiguration('sloppiler')) {
-                sidebar.refresh();
+                sidebar.refresh(getModels());
             }
-        }),
-        vscode.window.onDidCloseTerminal(t => {
-            if (t === terminal) { terminal = undefined; }
         }),
     );
 }
@@ -99,10 +103,11 @@ async function pickProvider() {
     });
     if (!picked) { return; }
 
-    const models = MODELS[picked] ?? [];
-    const modelItems = [
+    const models = getModels()[picked] ?? [];
+    const modelItems: vscode.QuickPickItem[] = [
         { label: '(provider default)', description: '' },
         ...models.map(m => ({ label: m, description: '' })),
+        { label: '$(edit) Enter custom model...', description: '' },
     ];
     const pickedModel = await vscode.window.showQuickPick(modelItems, {
         title: `Select model for ${picked}`,
@@ -110,12 +115,22 @@ async function pickProvider() {
     });
     if (!pickedModel) { return; }
 
+    let modelValue = pickedModel.label === '(provider default)' ? '' : pickedModel.label;
+    if (pickedModel.label.includes('Enter custom model')) {
+        modelValue = await vscode.window.showInputBox({ prompt: `Enter model name for ${picked}`, placeHolder: 'e.g. qwen2.5-coder:1.5b' }) ?? '';
+    }
+
     const cfg = vscode.workspace.getConfiguration('sloppiler');
     await cfg.update('provider', picked, vscode.ConfigurationTarget.Global);
-    await cfg.update('model', pickedModel.label === '(provider default)' ? '' : pickedModel.label, vscode.ConfigurationTarget.Global);
+    await cfg.update('model', modelValue, vscode.ConfigurationTarget.Global);
 }
 
 function compile() {
+    if (compiling) {
+        vscode.window.showWarningMessage('Sloppiler: synthesis already in progress.');
+        return;
+    }
+
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
         vscode.window.showErrorMessage('Sloppiler: No active file to synthesize.');
@@ -129,6 +144,7 @@ function compile() {
     const provider   = cfg.get<string>('provider', 'local');
     const model      = cfg.get<string>('model', '');
     const apiKey     = cfg.get<string>('apiKey', '');
+    const ollamaUrl  = cfg.get<string>('ollamaUrl', 'http://localhost:11434/api/generate');
     const target     = cfg.get<string>('target', 'linux');
     const outputPath = cfg.get<string>('outputPath', 'a.out');
     const optimistic = cfg.get<boolean>('optimistic', false);
@@ -137,32 +153,62 @@ function compile() {
 
     const args: string[] = [];
     args.push(`--provider=${provider}`);
-    if (model)  { args.push('-model', model); }
+    if (model)  { args.push('--model', model); }
     if (apiKey) { args.push(`--api-key=${apiKey}`); }
+    if (provider === 'local') { args.push(`--ollama=${ollamaUrl}`); }
     args.push(`--target=${target}`);
     args.push('-o', outputPath);
-    if (optimistic)  { args.push('--optimistic'); }
-    if (loop > 0)    { args.push('--loop', String(loop)); }
+    if (optimistic)    { args.push('--optimistic'); }
+    if (loop > 0)      { args.push('--loop', String(loop)); }
     if (forceIter > 0) { args.push('--force-iterate', String(forceIter)); }
-    args.push(quote(filePath));
+    args.push(filePath);
 
-    const cmd = [quote(executable), ...args].join(' ');
+    compiling = true;
+    outputChannel.clear();
 
-    const msg = COMPILE_MESSAGES[Math.floor(Math.random() * COMPILE_MESSAGES.length)];
-    vscode.window.setStatusBarMessage(`$(sync~spin) ${msg}`, 6000);
+    vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'Sloppiler',
+        cancellable: true,
+    }, (progress, token) => {
+        progress.report({ message: 'initializing synthesis pipeline...' });
 
-    if (!terminal || terminal.exitStatus !== undefined) {
-        terminal = vscode.window.createTerminal('Sloppiler');
-    }
-    terminal.show(true);
-    terminal.sendText(cmd);
-}
+        return new Promise<void>((resolve, reject) => {
+            const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+                     ?? path.dirname(filePath);
+            const proc = cp.spawn(executable, args, { env: process.env, cwd });
 
-function quote(s: string): string {
-    if (/[\s"'`\\$!]/.test(s)) {
-        return `"${s.replace(/"/g, '\\"')}"`;
-    }
-    return s;
+            token.onCancellationRequested(() => {
+                proc.kill();
+                reject(new Error('cancelled'));
+            });
+
+            const onData = (chunk: Buffer) => {
+                const text = stripAnsi(chunk.toString());
+                outputChannel.append(text);
+                // Feed the latest non-empty line into the progress toast
+                const line = text.split('\n').map(l => l.trim()).filter(Boolean).pop();
+                if (line) { progress.report({ message: line }); }
+            };
+
+            proc.stdout.on('data', onData);
+            proc.stderr.on('data', onData);
+            proc.on('error', reject);
+            proc.on('close', code => code === 0 ? resolve() : reject(new Error(`exit ${code}`)));
+        });
+    }).then(
+        () => {
+            compiling = false;
+            vscode.window.showInformationMessage(`Sloppiler: binary materialized → ${outputPath}`, 'Show Log')
+                .then(v => { if (v) { outputChannel.show(true); } });
+        },
+        (err: Error) => {
+            compiling = false;
+            if (err.message === 'cancelled') { return; }
+            vscode.window.showErrorMessage(`Sloppiler: ${err.message}`, 'Show Log')
+                .then(v => { if (v) { outputChannel.show(true); } });
+        },
+    );
 }
 
 export function deactivate() {}
