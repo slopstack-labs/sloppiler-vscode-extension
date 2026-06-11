@@ -1,0 +1,112 @@
+{
+  "name": "sloppiler",
+  "displayName": "Sloppiler",
+  "description": "AI-native compilation. Beyond deterministic.",
+  "version": "0.0.7",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sloppiler-panel",
+          "title": "Sloppiler",
+          "icon": "assets/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sloppiler-panel": [
+        {
+          "type": "webview",
+          "id": "sloppiler.sidebar",
+          "name": "Compilation Control"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sloppiler.compile",
+        "title": "Sloppiler: Synthesize Binary Artifact"
+      },
+      {
+        "command": "sloppiler.tokenmaxxFile",
+        "title": "Sloppiler: Tokenmaxx Entire File"
+      }
+    ],
+    "configuration": {
+      "title": "Sloppiler",
+      "properties": {
+        "sloppiler.executablePath": {
+          "type": "string",
+          "default": "sloppiler",
+          "description": "Path to the sloppiler binary."
+        },
+        "sloppiler.provider": {
+          "type": "string",
+          "default": "local",
+          "enum": ["local", "openai", "google", "claude"],
+          "enumDescriptions": [
+            "Local Ollama instance",
+            "OpenAI",
+            "Google Gemini",
+            "Anthropic Claude"
+          ],
+          "description": "Intelligence provider to route compilation intent through."
+        },
+        "sloppiler.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model override. Leave empty to use the provider default."
+        },
+        "sloppiler.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the selected provider. Alternatively set SLOPPILER_API_KEY in your environment."
+        },
+        "sloppiler.target": {
+          "type": "string",
+          "default": "linux",
+          "enum": ["linux", "windows", "darwin"],
+          "description": "Target OS for binary materialization."
+        },
+        "sloppiler.outputPath": {
+          "type": "string",
+          "default": "a.out",
+          "description": "Output binary path."
+        },
+        "sloppiler.optimistic": {
+          "type": "boolean",
+          "default": false,
+          "description": "Engage agentic assembly co-pilot mode (requires nasm + ld)."
+        },
+        "sloppiler.loop": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Max fix iterations when assembly fails (use with optimistic mode)."
+        },
+        "sloppiler.forceIterate": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Force N improvement cycles even on successful compilation."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
