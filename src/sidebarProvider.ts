@@ -190,8 +190,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     .target-group button:first-child { border-radius: 2px 0 0 2px; }
     .target-group button:last-child  { border-radius: 0 2px 2px 0; }
     .target-group button.active {
-      background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
-      color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border-color: var(--vscode-button-background);
+      font-weight: 700;
     }
 
     .compile-btn {
