@@ -3,12 +3,22 @@
   "displayName": "Sloppiler",
   "description": "AI-native compilation. Beyond deterministic.",
   "version": "0.0.10",
+  "publisher": "slopstack-labs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slopstack-labs/sloppiler-vscode-extension.git"
+  },
+  "homepage": "https://github.com/slopstack-labs/sloppiler-vscode-extension#readme",
+  "bugs": {
+    "url": "https://github.com/slopstack-labs/sloppiler-vscode-extension/issues"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
   "activationEvents": ["onStartupFinished"],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -36,6 +46,10 @@
       {
         "command": "sloppiler.tokenmaxxFile",
         "title": "Sloppiler: Tokenmaxx Entire File"
+      },
+      {
+        "command": "sloppiler.pickProvider",
+        "title": "Sloppiler: Change Intelligence Provider"
       }
     ],
     "configuration": {
@@ -74,6 +88,12 @@
           "enum": ["linux", "windows", "darwin"],
           "description": "Target OS for binary materialization."
         },
+        "sloppiler.arch": {
+          "type": "string",
+          "default": "amd64",
+          "enum": ["amd64", "arm64"],
+          "description": "Target CPU architecture for binary materialization."
+        },
         "sloppiler.outputPath": {
           "type": "string",
           "default": "a.out",
@@ -105,18 +125,26 @@
           "type": "object",
           "default": {},
           "description": "Extra models to add to each provider's list. Keys are provider names (local, openai, google, claude), values are arrays of model name strings. Example: {\"local\": [\"qwen2.5-coder:1.5b\", \"mistral\"]}"
+        },
+        "sloppiler.customIdentifiers": {
+          "type": "object",
+          "default": {},
+          "description": "Extra Tokenmaxx identifier mappings, merged into (and overriding) the built-in map. Keys are the substandard identifiers, values are their tokenmaxxed replacements. Example: {\"e\": \"eventPayloadArtifact\", \"db\": \"databaseConnectionHandle\"}"
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "vscode:prepublish": "npm run package",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "npm run check-types && node esbuild.js --production",
+    "check-types": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
     "@types/node": "^20.0.0",
+    "esbuild": "^0.24.0",
     "typescript": "^5.3.0"
   }
 }
