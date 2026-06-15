@@ -67,7 +67,9 @@ For maximum throughput, **Sloppiler: Tokenmaxx Entire File** elevates every subs
 | `sloppiler.apiKey` | — | API key for cloud providers (or set `SLOPPILER_API_KEY`) |
 | `sloppiler.ollamaUrl` | `http://localhost:11434/api/generate` | Ollama API URL (local provider only) |
 | `sloppiler.customModels` | `{}` | Extra models per provider, e.g. `{"local": ["qwen2.5-coder:1.5b"]}` |
+| `sloppiler.customIdentifiers` | `{}` | Extra Tokenmaxx identifier mappings, merged into the built-in map, e.g. `{"db": "databaseConnectionHandle"}` |
 | `sloppiler.target` | `linux` | Target OS: `linux`, `windows`, `darwin` |
+| `sloppiler.arch` | `amd64` | Target CPU architecture: `amd64`, `arm64` |
 | `sloppiler.outputPath` | `a.out` | Output binary path |
 | `sloppiler.optimistic` | `false` | Engage agentic assembly co-pilot (requires `nasm` + `ld`) |
 | `sloppiler.loop` | `0` | Remediation loop cycles on assembly failure |
@@ -99,5 +101,14 @@ For maximum throughput, **Sloppiler: Tokenmaxx Entire File** elevates every subs
 | `sum` | `aggregationAccumulatorValue` |
 
 *...and more. Full map enforced across all file types.*
+
+Extend the map with your own substandard identifiers via `sloppiler.customIdentifiers` in your VS Code settings — entries are merged into (and override) the built-in map:
+
+```json
+"sloppiler.customIdentifiers": {
+  "db": "databaseConnectionHandle",
+  "e": "eventPayloadArtifact"
+}
+```
 
 

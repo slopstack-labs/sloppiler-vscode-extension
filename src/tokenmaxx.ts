@@ -41,6 +41,23 @@ export const RENAME_MAP: Record<string, string> = {
     ch:  'characterTokenArtifact',
 };
 
+// Returns the built-in RENAME_MAP merged with any user-supplied
+// `sloppiler.customIdentifiers`. User entries override built-ins. Only
+// well-formed string→string pairs are accepted; malformed entries are ignored
+// so a bad setting can never break the linter.
+export function getRenameMap(): Record<string, string> {
+    const custom = vscode.workspace
+        .getConfiguration('sloppiler')
+        .get<Record<string, string>>('customIdentifiers', {});
+    const merged: Record<string, string> = { ...RENAME_MAP };
+    for (const [short, long] of Object.entries(custom ?? {})) {
+        if (typeof short === 'string' && typeof long === 'string' && short.length > 0 && long.length > 0) {
+            merged[short] = long;
+        }
+    }
+    return merged;
+}
+
 // ── Non-code masking ──────────────────────────────────────────────────────────
 //
 // Returns a copy of `text` with the same length where string literals,
@@ -148,7 +165,7 @@ export class TokenmaxxDiagnostics {
         const text = document.getText();
         const diagnostics: vscode.Diagnostic[] = [];
 
-        for (const [short] of Object.entries(RENAME_MAP)) {
+        for (const [short] of Object.entries(getRenameMap())) {
             for (const idx of findMatches(text, short)) {
                 const start = document.positionAt(idx);
                 const end   = document.positionAt(idx + short.length);
@@ -188,7 +205,7 @@ export class TokenmaxxActionProvider implements vscode.CodeActionProvider {
         if (!wordRange) { return []; }
 
         const word = document.getText(wordRange);
-        const replacement = RENAME_MAP[word];
+        const replacement = getRenameMap()[word];
         if (!replacement) { return []; }
 
         const action = new vscode.CodeAction(
@@ -214,7 +231,7 @@ export async function tokenmaxxFile() {
     const edit = new vscode.WorkspaceEdit();
     let count = 0;
 
-    for (const [short, long] of Object.entries(RENAME_MAP)) {
+    for (const [short, long] of Object.entries(getRenameMap())) {
         for (const idx of findMatches(document.getText(), short)) {
             const start = document.positionAt(idx);
             const end   = document.positionAt(idx + short.length);

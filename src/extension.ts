@@ -146,6 +146,7 @@ function compile() {
     const apiKey     = cfg.get<string>('apiKey', '');
     const ollamaUrl  = cfg.get<string>('ollamaUrl', 'http://localhost:11434/api/generate');
     const target     = cfg.get<string>('target', 'linux');
+    const arch       = cfg.get<string>('arch', 'amd64');
     const outputPath = cfg.get<string>('outputPath', 'a.out');
     const optimistic = cfg.get<boolean>('optimistic', false);
     const loop       = cfg.get<number>('loop', 0);
@@ -157,6 +158,7 @@ function compile() {
     if (apiKey) { args.push(`--api-key=${apiKey}`); }
     if (provider === 'local') { args.push(`--ollama=${ollamaUrl}`); }
     args.push(`--target=${target}`);
+    args.push(`--arch=${arch}`);
     args.push('-o', outputPath);
     if (optimistic)    { args.push('--optimistic'); }
     if (loop > 0)      { args.push('--loop', String(loop)); }
